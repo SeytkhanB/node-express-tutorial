@@ -2,7 +2,6 @@
 // PUT is for checking if resource exists then update, else create new resource.
 // and also PUT will remove other fields except for given. when we work wih PUT
 // the expectation is "replace item"
-
 // PATCH is always for updating a resource. when we are working with PATCH, we
 // are just uploading the properties that we are passing
 
