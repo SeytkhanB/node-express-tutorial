@@ -1,27 +1,45 @@
-require('dotenv').config();
-require('express-async-errors');
-const express = require('express');
+import dotenv from "dotenv";
+import "express-async-errors";
+import express from "express";
+import authRouter from "./routes/auth.js";
+import jobsRouter from "./routes/jobs.js";
+import notFoundMiddleware from "./middleware/not-found.js";
+import errorHandlerMiddleware from "./middleware/error-handler.js";
+import connectDB from "./db/connect.js";
+import authMiddleware from "./middleware/authentication.js";
+import helmet from "helmet";
+import cors from "cors";
+import xss from "xss-clean";
+import rateLimit from "express-rate-limit"; // The maximum number of connections to allow during the window before rate limiting the client.
 const app = express();
+dotenv.config();
 
-// error handler
-const notFoundMiddleware = require('./middleware/not-found');
-const errorHandlerMiddleware = require('./middleware/error-handler');
-
+app.set("trust proxy", 1);
+app.use(
+  rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // limit each IP to 100 requests per windowMs
+  })
+);
 app.use(express.json());
-// extra packages
+// security packages
+app.use(helmet()); // It sets up various HTTP headers to prevent attacks like Cross-Site-Scripting(XSS), clickjacking, etc.
+app.use(cors()); // Cross-origin resource sharing (CORS) allows AJAX requests to skip the Same-origin policy and access resources from remote hosts.
+// By installing and implementing "CORS" package, we make our API accessible to the public
+app.use(xss()); // Node.js Connect middleware to sanitize user input coming from POST body, GET queries, and url params. Works with Express, Restify, or any other Connect app.
 
 // routes
-app.get('/', (req, res) => {
-  res.send('jobs api');
-});
+app.use("/api/v1/auth", authRouter);
+app.use("/api/v1/jobs", authMiddleware, jobsRouter);
 
 app.use(notFoundMiddleware);
 app.use(errorHandlerMiddleware);
 
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 5000;
 
 const start = async () => {
   try {
+    await connectDB(process.env.MONGODB_URI);
     app.listen(port, () =>
       console.log(`Server is listening on port ${port}...`)
     );
