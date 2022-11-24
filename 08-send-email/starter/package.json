@@ -3,8 +3,9 @@
   "version": "1.0.0",
   "description": "",
   "main": "app.js",
+  "type": "module",
   "scripts": {
-    "start": "nodemon app.js"
+    "dev": "nodemon app.js"
   },
   "author": "",
   "license": "ISC",
@@ -31,6 +32,6 @@
     "nodemon": "^2.0.9"
   },
   "engines": {
-    "node": "14.x"
+    "node": "18.x"
   }
 }
