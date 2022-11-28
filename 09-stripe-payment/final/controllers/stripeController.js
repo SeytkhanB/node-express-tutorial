@@ -1,4 +1,4 @@
-const stripe = require('stripe')(process.env.STRIPE_KEY);
+const stripe = require("stripe")(process.env.STRIPE_KEY);
 
 const stripeController = async (req, res) => {
   const { purchase, total_amount, shipping_fee } = req.body;
@@ -9,7 +9,7 @@ const stripeController = async (req, res) => {
 
   const paymentIntent = await stripe.paymentIntents.create({
     amount: calculateOrderAmount(),
-    currency: 'usd',
+    currency: "usd",
   });
 
   res.json({ clientSecret: paymentIntent.client_secret });
