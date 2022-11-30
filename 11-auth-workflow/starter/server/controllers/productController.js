@@ -1,82 +1,121 @@
-const Product = require('../models/Product');
-const { StatusCodes } = require('http-status-codes');
-const CustomError = require('../errors');
-const path = require('path');
+import { StatusCodes } from "http-status-codes";
+import { NotFoundError, BadRequestError } from "../errors/index.js";
+import Product from "../model/Product.js";
+import path from "path";
+// import * as Cloudinary from "cloudinary";
+// import fs from "fs";
+const __dirname = path.resolve();
 
-const createProduct = async (req, res) => {
-  req.body.user = req.user.userId;
-  const product = await Product.create(req.body);
-  res.status(StatusCodes.CREATED).json({ product });
-};
+// ------------------------------------------------------------
 const getAllProducts = async (req, res) => {
   const products = await Product.find({});
-
-  res.status(StatusCodes.OK).json({ products, count: products.length });
+  res
+    .status(StatusCodes.OK)
+    .json({ success: true, products, count: products.length });
 };
+
+// ------------------------------------------------------------
+const createProduct = async (req, res) => {
+  req.body.createdBy = req.user.userId;
+  const product = await Product.create(req.body);
+
+  res.status(StatusCodes.CREATED).json({ success: true, product });
+};
+
+// ------------------------------------------------------------
 const getSingleProduct = async (req, res) => {
-  const { id: productId } = req.params;
+  const {
+    params: { id: productId },
+  } = req;
 
-  const product = await Product.findOne({ _id: productId }).populate('reviews');
+  const product = await Product.findOne({ _id: productId }).populate("reviews");
 
   if (!product) {
-    throw new CustomError.NotFoundError(`No product with id : ${productId}`);
+    throw new NotFoundError(`No product with id: ${id}`);
   }
-
-  res.status(StatusCodes.OK).json({ product });
+  res.status(StatusCodes.OK).json({ success: true, product });
 };
+
+// ------------------------------------------------------------
 const updateProduct = async (req, res) => {
-  const { id: productId } = req.params;
+  const {
+    user: { userId },
+    params: { id: productId },
+  } = req;
 
-  const product = await Product.findOneAndUpdate({ _id: productId }, req.body, {
-    new: true,
-    runValidators: true,
-  });
+  const product = await Product.findOneAndUpdate(
+    { _id: productId, createdBy: userId },
+    req.body,
+    { new: true, runValidators: true }
+  );
 
   if (!product) {
-    throw new CustomError.NotFoundError(`No product with id : ${productId}`);
+    throw new NotFoundError(`No product with id: ${productId}`);
   }
 
-  res.status(StatusCodes.OK).json({ product });
+  res.status(StatusCodes.OK).json({ success: true, msg: "product updated" });
 };
+
+// ------------------------------------------------------------
 const deleteProduct = async (req, res) => {
-  const { id: productId } = req.params;
+  const {
+    params: { id: productId },
+  } = req;
 
   const product = await Product.findOne({ _id: productId });
 
   if (!product) {
-    throw new CustomError.NotFoundError(`No product with id : ${productId}`);
+    throw new NotFoundError(`No product with id: ${productId}`);
   }
 
   await product.remove();
-  res.status(StatusCodes.OK).json({ msg: 'Success! Product removed.' });
+
+  res.status(StatusCodes.OK).json({ success: true, product: null });
 };
+
+// const result = await Cloudinary.v2.uploader.upload(
+//   req.files.image.tempFilePath,
+//   {
+//     use_filename: true,
+//     folder: "file-upload",
+//   }
+// );
+//
+// // delete image from "tmp" file, in orde not to keep them there
+// fs.unlinkSync(req.files.image.tempFilePath);
+//
+// res
+//   .status(StatusCodes.OK)
+//   .json({ success: true, image: { src: result.secure_url } });
+
+// ------------------------------------------------------------
 const uploadImage = async (req, res) => {
   if (!req.files) {
-    throw new CustomError.BadRequestError('No File Uploaded');
+    throw new BadRequestError("No file to upload");
   }
-  const productImage = req.files.image;
 
-  if (!productImage.mimetype.startsWith('image')) {
-    throw new CustomError.BadRequestError('Please Upload Image');
+  const productImage = req.files.image;
+  if (!productImage.mimetype.startsWith("image")) {
+    throw new BadRequestError("Please upload the image");
   }
 
   const maxSize = 1024 * 1024;
-
   if (productImage.size > maxSize) {
-    throw new CustomError.BadRequestError(
-      'Please upload image smaller than 1MB'
-    );
+    throw new BadRequestError("Please upload image smaller than 1MB");
   }
 
   const imagePath = path.join(
     __dirname,
-    '../public/uploads/' + `${productImage.name}`
+    `./public/uploads/${productImage.name}`
   );
   await productImage.mv(imagePath);
-  res.status(StatusCodes.OK).json({ image: `/uploads/${productImage.name}` });
+
+  res
+    .status(StatusCodes.OK)
+    .json({ success: true, image: `/uploads/${productImage.name}` });
 };
 
-module.exports = {
+export {
   createProduct,
   getAllProducts,
   getSingleProduct,

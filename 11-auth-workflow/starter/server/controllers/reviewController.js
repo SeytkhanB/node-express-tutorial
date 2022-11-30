@@ -1,93 +1,123 @@
-const Review = require('../models/Review');
-const Product = require('../models/Product');
+import { StatusCodes } from "http-status-codes";
+import { BadRequestError, NotFoundError } from "../errors/index.js";
+import Product from "../model/Product.js";
+import Review from "../model/Review.js";
+import { checkPermissions } from "../utils/index.js";
 
-const { StatusCodes } = require('http-status-codes');
-const CustomError = require('../errors');
-const { checkPermissions } = require('../utils');
-
+// ------------------------------------------------------------
 const createReview = async (req, res) => {
-  const { product: productId } = req.body;
+  const {
+    body: { product: productId },
+    user: { userId },
+  } = req;
 
   const isValidProduct = await Product.findOne({ _id: productId });
-
   if (!isValidProduct) {
-    throw new CustomError.NotFoundError(`No product with id : ${productId}`);
+    throw new NotFoundError(`No product with id: ${productId}`);
   }
 
-  const alreadySubmitted = await Review.findOne({
+  // checking, whether user has submitted a comment
+  // users can leave one review only
+  const alreadyReviewed = await Review.findOne({
     product: productId,
-    user: req.user.userId,
+    createdBy: userId,
   });
-
-  if (alreadySubmitted) {
-    throw new CustomError.BadRequestError(
-      'Already submitted review for this product'
-    );
+  if (alreadyReviewed) {
+    throw new BadRequestError("Already submitted review for this product!");
   }
 
-  req.body.user = req.user.userId;
-  const review = await Review.create(req.body);
-  res.status(StatusCodes.CREATED).json({ review });
-};
-const getAllReviews = async (req, res) => {
-  const reviews = await Review.find({}).populate({
-    path: 'product',
-    select: 'name company price',
-  });
+  req.body.createdBy = userId;
 
-  res.status(StatusCodes.OK).json({ reviews, count: reviews.length });
+  const review = await Review.create(req.body);
+  res.status(StatusCodes.CREATED).json({ success: true, review });
 };
+
+// ------------------------------------------------------------
+const getAllReviews = async (req, res) => {
+  const reviews = await Review.find({})
+    .populate({
+      path: "product",
+      select: "name company price",
+    })
+    .populate({
+      path: "createdBy",
+      select: "name",
+    });
+  res
+    .status(StatusCodes.OK)
+    .json({ success: true, reviews, count: reviews.length });
+};
+
+// ------------------------------------------------------------
 const getSingleReview = async (req, res) => {
   const { id: reviewId } = req.params;
 
-  const review = await Review.findOne({ _id: reviewId });
-
+  const review = await Review.findById({ _id: reviewId })
+    .populate({
+      path: "product",
+      select: "name company price",
+    })
+    .populate({
+      path: "createdBy",
+      select: "name",
+    });
   if (!review) {
-    throw new CustomError.NotFoundError(`No review with id ${reviewId}`);
+    throw new NotFoundError(`No review with id: ${reviewId}`);
   }
 
-  res.status(StatusCodes.OK).json({ review });
+  res.status(StatusCodes.OK).json({ success: true, review });
 };
+
+// ------------------------------------------------------------
 const updateReview = async (req, res) => {
-  const { id: reviewId } = req.params;
-  const { rating, title, comment } = req.body;
+  const {
+    params: { id: reviewId },
+    body: { rating, title, comment },
+  } = req;
 
-  const review = await Review.findOne({ _id: reviewId });
-
-  if (!review) {
-    throw new CustomError.NotFoundError(`No review with id ${reviewId}`);
+  if (!rating || !title || !comment) {
+    throw new BadRequestError("Please provide all values");
   }
 
-  checkPermissions(req.user, review.user);
+  const review = await Review.findById({ _id: reviewId });
+  if (!review) {
+    throw new NotFoundError(`No review with id: ${reviewId}`);
+  }
 
-  review.rating = rating;
-  review.title = title;
-  review.comment = comment;
+  checkPermissions(req.user, review.createdBy);
+
+  (review.rating = rating), (review.title = title), (review.comment = comment);
 
   await review.save();
-  res.status(StatusCodes.OK).json({ review });
+
+  res.status(StatusCodes.OK).json({ success: true, review });
 };
+
+// ------------------------------------------------------------
 const deleteReview = async (req, res) => {
   const { id: reviewId } = req.params;
 
-  const review = await Review.findOne({ _id: reviewId });
-
+  const review = await Review.findById({ _id: reviewId });
   if (!review) {
-    throw new CustomError.NotFoundError(`No review with id ${reviewId}`);
+    throw new NotFoundError(`No review with id: ${reviewId}`);
   }
 
-  checkPermissions(req.user, review.user);
+  checkPermissions(req.user, review.createdBy);
+
   await review.remove();
-  res.status(StatusCodes.OK).json({ msg: 'Success! Review removed' });
+
+  res.status(StatusCodes.OK).json({ success: true, msg: "review deleted" });
 };
 
 const getSingleProductReviews = async (req, res) => {
   const { id: productId } = req.params;
   const reviews = await Review.find({ product: productId });
-  res.status(StatusCodes.OK).json({ reviews, count: reviews.length });
+  res
+    .status(StatusCodes.OK)
+    .json({ success: true, reviews, count: reviews.length });
 };
 
-module.exports = {
+export {
   createReview,
   getAllReviews,
   getSingleReview,

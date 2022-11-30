@@ -1,67 +1,67 @@
-require('dotenv').config();
-require('express-async-errors');
-// express
+import rateLimit from "express-rate-limit";
+import helmet from "helmet";
+import cors from "cors";
+import xss from "xss-clean";
+import mongoSanitize from "express-mongo-sanitize";
 
-const express = require('express');
+import dotenv from "dotenv";
+import "express-async-errors";
+
+import express from "express";
+import errorHandlerMiddleware from "./middleware/error-handler.js";
+import notFoundMiddleware from "./middleware/not-found.js";
+import connectDB from "./db/connect.js";
+import cookieParser from "cookie-parser";
+import authRouter from "./routes/authRoutes.js";
+import userRouter from "./routes/userRoutes.js";
+import productRouter from "./routes/productRoutes.js";
+import reviewRouter from "./routes/reviewRoutes.js";
+import orderRouter from "./routes/orderRoutes.js";
+import { authenticateUser } from "./middleware/authentication.js";
+import fileUpload from "express-fileupload";
+dotenv.config();
+
 const app = express();
-// rest of the packages
-const morgan = require('morgan');
-const cookieParser = require('cookie-parser');
-const fileUpload = require('express-fileupload');
-const rateLimiter = require('express-rate-limit');
-const helmet = require('helmet');
-const xss = require('xss-clean');
-const cors = require('cors');
-const mongoSanitize = require('express-mongo-sanitize');
 
-// database
-const connectDB = require('./db/connect');
-
-//  routers
-const authRouter = require('./routes/authRoutes');
-const userRouter = require('./routes/userRoutes');
-const productRouter = require('./routes/productRoutes');
-const reviewRouter = require('./routes/reviewRoutes');
-const orderRouter = require('./routes/orderRoutes');
-
-// middleware
-const notFoundMiddleware = require('./middleware/not-found');
-const errorHandlerMiddleware = require('./middleware/error-handler');
-
-app.set('trust proxy', 1);
+app.set("trust proxy", 1);
 app.use(
-  rateLimiter({
+  rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 60,
   })
 );
-app.use(helmet());
 app.use(cors());
 app.use(xss());
+app.use(helmet());
 app.use(mongoSanitize());
-
 app.use(express.json());
-app.use(cookieParser(process.env.JWT_SECRET));
-
-app.use(express.static('./public'));
+app.use(cookieParser(process.env.JWT_SECRET)); // the "token" is now available from "signedCookies"
+app.use(express.static("./public"));
 app.use(fileUpload());
 
-app.use('/api/v1/auth', authRouter);
-app.use('/api/v1/users', userRouter);
-app.use('/api/v1/products', productRouter);
-app.use('/api/v1/reviews', reviewRouter);
-app.use('/api/v1/orders', orderRouter);
+// if the front-end application is not on a same domain, we will have to make our
+// resources available and we do that using this "cors" package.
+// Also, we can only send them "cookies" back, where they came from and that means
+// we can only use cookies on a same domain.
+// In order to get "cookies" on front-end we should use inside "package.json"
+// ("proxy": "http://..our host here..") <-- in CRA
+app.use(cors());
 
-app.use(notFoundMiddleware);
+app.use("/api/v1/auth", authRouter);
+app.use("/api/v1/users", authenticateUser, userRouter);
+app.use("/api/v1/products", productRouter);
+app.use("/api/v1/reviews", reviewRouter);
+app.use("/api/v1/orders", authenticateUser, orderRouter);
+
+app.use(notFoundMiddleware); // order matters
 app.use(errorHandlerMiddleware);
 
-const port = process.env.PORT || 5000;
+const port = process.env.PORT || 3000;
+
 const start = async () => {
   try {
-    await connectDB(process.env.MONGO_URL);
-    app.listen(port, () =>
-      console.log(`Server is listening on port ${port}...`)
-    );
+    await connectDB(process.env.MONGODB_URI);
+    app.listen(port, console.log(`Server is listening on port ${port}...`));
   } catch (error) {
     console.log(error);
   }

@@ -1,25 +1,19 @@
-const express = require('express');
-const router = express.Router();
-const {
-  authenticateUser,
-  authorizePermissions,
-} = require('../middleware/authentication');
-const {
+import {
   getAllUsers,
   getSingleUser,
   showCurrentUser,
   updateUser,
   updateUserPassword,
-} = require('../controllers/userController');
+} from "../controllers/userController.js";
+import express from "express";
+import { authorizePermissions } from "../middleware/authentication.js";
 
-router
-  .route('/')
-  .get(authenticateUser, authorizePermissions('admin'), getAllUsers);
+const router = express.Router();
 
-router.route('/showMe').get(authenticateUser, showCurrentUser);
-router.route('/updateUser').patch(authenticateUser, updateUser);
-router.route('/updateUserPassword').patch(authenticateUser, updateUserPassword);
+router.get("/", authorizePermissions("admin"), getAllUsers);
+router.get("/currUser", showCurrentUser);
+router.patch("/updateUser", updateUser);
+router.patch("/updateUserPassword", updateUserPassword);
+router.get("/:id", getSingleUser); // should be under all of others. order matters
 
-router.route('/:id').get(authenticateUser, getSingleUser);
-
-module.exports = router;
+export default router;

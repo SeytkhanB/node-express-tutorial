@@ -1,107 +1,149 @@
-const Order = require('../models/Order');
-const Product = require('../models/Product');
+import { BadRequestError, NotFoundError } from "../errors/index.js";
+import Product from "../model/Product.js";
+import Order from "../model/Order.js";
+import { StatusCodes } from "http-status-codes";
+import { checkPermissions } from "../utils/index.js";
 
-const { StatusCodes } = require('http-status-codes');
-const CustomError = require('../errors');
-const { checkPermissions } = require('../utils');
-
+// ------------------------------------------------------------
 const fakeStripeAPI = async ({ amount, currency }) => {
-  const client_secret = 'someRandomValue';
+  const client_secret = "someRandomValue";
   return { client_secret, amount };
 };
 
+// ------------------------------------------------------------
 const createOrder = async (req, res) => {
-  const { items: cartItems, tax, shippingFee } = req.body;
+  const {
+    body: { items: cartItems, tax, shippingFee },
+    user: { userId: createdBy },
+  } = req;
 
   if (!cartItems || cartItems.length < 1) {
-    throw new CustomError.BadRequestError('No cart items provided');
+    throw new BadRequestError("No order items provided");
   }
+
   if (!tax || !shippingFee) {
-    throw new CustomError.BadRequestError(
-      'Please provide tax and shipping fee'
-    );
+    throw new BadRequestError("Please provide all values");
   }
 
   let orderItems = [];
   let subtotal = 0;
 
-  for (const item of cartItems) {
-    const dbProduct = await Product.findOne({ _id: item.product });
+  for (let item of cartItems) {
+    const dbProduct = await Product.findById({ _id: item.product });
     if (!dbProduct) {
-      throw new CustomError.NotFoundError(
-        `No product with id : ${item.product}`
-      );
+      throw new NotFoundError(`No product with id: ${item.product}`);
     }
-    const { name, price, image, _id } = dbProduct;
+
+    const { _id: product, name, price, image } = dbProduct;
+
     const singleOrderItem = {
       amount: item.amount,
       name,
-      price,
       image,
-      product: _id,
+      price,
+      product,
     };
+
     // add item to order
     orderItems = [...orderItems, singleOrderItem];
+
     // calculate subtotal
     subtotal += item.amount * price;
   }
+
   // calculate total
-  const total = tax + shippingFee + subtotal;
-  // get client secret
+  const total = Number((tax + shippingFee + subtotal).toFixed(2));
+  console.log("total is: ", total);
+
+  // get fake client secret
   const paymentIntent = await fakeStripeAPI({
     amount: total,
-    currency: 'usd',
+    currency: "usd",
   });
 
   const order = await Order.create({
-    orderItems,
-    total,
-    subtotal,
     tax,
     shippingFee,
+    subtotal,
+    total,
+    orderItems,
+    createdBy,
     clientSecret: paymentIntent.client_secret,
-    user: req.user.userId,
   });
 
   res
     .status(StatusCodes.CREATED)
-    .json({ order, clientSecret: order.clientSecret });
+    .json({ success: true, order, clientSecret: order.clientSecret });
 };
-const getAllOrders = async (req, res) => {
-  const orders = await Order.find({});
-  res.status(StatusCodes.OK).json({ orders, count: orders.length });
-};
-const getSingleOrder = async (req, res) => {
-  const { id: orderId } = req.params;
-  const order = await Order.findOne({ _id: orderId });
-  if (!order) {
-    throw new CustomError.NotFoundError(`No order with id : ${orderId}`);
-  }
-  checkPermissions(req.user, order.user);
-  res.status(StatusCodes.OK).json({ order });
-};
-const getCurrentUserOrders = async (req, res) => {
-  const orders = await Order.find({ user: req.user.userId });
-  res.status(StatusCodes.OK).json({ orders, count: orders.length });
-};
-const updateOrder = async (req, res) => {
-  const { id: orderId } = req.params;
-  const { paymentIntentId } = req.body;
 
-  const order = await Order.findOne({ _id: orderId });
+// ------------------------------------------------------------
+const getAllOrders = async (req, res) => {
+  const orders = await Order.find({}).populate({
+    path: "createdBy",
+    select: "name",
+  });
+  res
+    .status(StatusCodes.OK)
+    .json({ success: true, orders, count: orders.length });
+};
+
+// ------------------------------------------------------------
+const getSingleOrder = async (req, res) => {
+  const {
+    params: { id: orderId },
+    user: user,
+  } = req;
+
+  const order = await Order.findById({ _id: orderId });
   if (!order) {
-    throw new CustomError.NotFoundError(`No order with id : ${orderId}`);
+    throw new NotFoundError(`No order with id: ${orderId}`);
   }
-  checkPermissions(req.user, order.user);
+
+  checkPermissions(user, order.createdBy);
+
+  res.status(StatusCodes.OK).json({ success: true, order });
+};
+
+// ------------------------------------------------------------
+const getCurrentUserOrders = async (req, res) => {
+  const {
+    user: { userId },
+  } = req;
+
+  const currentOrders = await Order.find({ createdBy: userId });
+
+  res
+    .status(StatusCodes.OK)
+    .json({ success: true, currentOrders, count: currentOrders.length });
+};
+
+// ------------------------------------------------------------
+const updateOrder = async (req, res) => {
+  const {
+    params: { id: orderId },
+    body: { paymentIntentId },
+    user: user,
+  } = req;
+
+  const order = await Order.findById({ _id: orderId }).populate({
+    path: "createdBy",
+    select: "name",
+  });
+  if (!order) {
+    throw new NotFoundError(`No order with id: ${orderId}`);
+  }
+
+  checkPermissions(user, order.createdBy);
 
   order.paymentIntentId = paymentIntentId;
-  order.status = 'paid';
+  order.status = "paid";
+
   await order.save();
 
-  res.status(StatusCodes.OK).json({ order });
+  res.status(StatusCodes.OK).json({ success: true, order });
 };
 
-module.exports = {
+export {
   getAllOrders,
   getSingleOrder,
   getCurrentUserOrders,
